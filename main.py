@@ -24,20 +24,15 @@
 # animating.  This will ensure the capacitive touch sensing isn't accidentally
 # calibrated with your body touching it (making it less accurate).
 #
-# Also ensure the adafruit_dotstar.mpy file is copied to your board from the
-# CircuitPython bundle zip release:
-#   - https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases
-#
 # Author: Tony DiCola
 # License: MIT License
 import math
 import time
 
 import board
+import busio
 import digitalio
 import touchio
-
-import adafruit_dotstar
 
 
 # Variables that control the code.  Try changing these to modify speed, color,
@@ -75,8 +70,31 @@ HEARTBEAT_HUE = 300.0   # The color hue to use when animating the heartbeat
                         # A value of 300 is a nice pink color.
 
 # First initialize the DotStar LED and turn it off.
-dotstar = adafruit_dotstar.DotStar(board.APA102_SCK, board.APA102_MOSI, 1)
-dotstar[0] = (0, 0, 0)  # Set the pixel to RGB color 0, 0, 0 or off.
+# We'll manually drive the dotstar instead of depending on the adafruit_dotstar
+# library for simplicity--there's no need to install other dependencies for
+# driving this one LED.
+dotstar_spi = busio.SPI(clock=board.APA102_SCK, MOSI=board.APA102_MOSI)
+# Raw dotstar protocol, start with 4 bytes of zero, then 0xFF and B, G, R
+# pixel data, followed by bytes of 0xFF tail (just one for 1 pixel).
+dotstar_data = bytearray([0x00, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00,
+                          0xFF])
+# Define a function to simplify setting dotstar color.
+def dotstar_color(rgb_color):
+    # Set the color of the dot star LED.  This is barebones dotstar driving
+    # code for simplicity and less dependency on other libraries.  We're only
+    # driving one LED!
+    try:
+        while not dotstar_spi.try_lock():
+            pass
+        dotstar_spi.configure(baudrate=4000000)
+        dotstar_data[5] = rgb_color[2] & 0xFF  # Blue
+        dotstar_data[6] = rgb_color[1] & 0xFF  # Green
+        dotstar_data[7] = rgb_color[0] & 0xFF  # Red
+        dotstar_spi.write(dotstar_data)
+    finally:
+        dotstar_spi.unlock()
+# Call the function above to turn off the dotstar initially (set it to all 0).
+dotstar_color((0, 0, 0))
 
 # Also make sure the on-board red LED is turned off.
 red_led = digitalio.DigitalInOut(board.L)
@@ -201,7 +219,7 @@ while True:
         # like we expect for full bright to zero brightness with HSV color
         # (i.e. no interpolation is necessary).
         val = max(x0, x1) * BRIGHTNESS
-        dotstar[0] = HSV_to_RGB(HEARTBEAT_HUE, 1.0, val)
+        dotstar_color(HSV_to_RGB(HEARTBEAT_HUE, 1.0, val))
     else:
         # The touch input is not being touched (touch.value is False) so
         # compute the hue with a smooth cycle over time.
@@ -213,4 +231,4 @@ while True:
         hue = lerp(x, -1.0, 1.0, 0.0, 359.0)
         # Finally update the DotStar LED by converting the HSV color at the
         # specified hue to a RGB color the LED understands.
-        dotstar[0] = HSV_to_RGB(hue, 1.0, BRIGHTNESS)
+        dotstar_color(HSV_to_RGB(hue, 1.0, BRIGHTNESS))

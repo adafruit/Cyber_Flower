@@ -23,6 +23,3 @@ indication that it's waiting to power on.  Place the flower down so nothing
 is touching it and then pick it up again after the DotStar LED starts
 animating.  This will ensure the capacitive touch sensing isn't accidentally
 calibrated with your body touching it (making it less accurate).
-
-Also ensure the adafruit_dotstar.mpy file is copied to your board from the
-CircuitPython bundle zip release: https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases
